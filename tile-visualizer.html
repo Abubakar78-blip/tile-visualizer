@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Advanced Tile Visualizer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+      background-color: #f4f4f4;
+    }
+
+    h2 {
+      color: #2c3e50;
+    }
+
+    .form-group {
+      margin-bottom: 10px;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    input, select, button {
+      padding: 8px;
+      width: 100%;
+      max-width: 300px;
+    }
+
+    #visualizer {
+      margin-top: 20px;
+      border: 2px solid #ccc;
+      width: 800px;
+      height: 500px;
+      background-color: white;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    .action-buttons {
+      margin-top: 15px;
+    }
+
+    .action-buttons button {
+      margin-right: 10px;
+      padding: 8px 12px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>🧱 Advanced Tile Visualizer – View in Your Room</h2>
+
+<div class="controls">
+  <div class="form-group">
+    <label>Room Width (ft):</label>
+    <input type="number" id="roomWidth" value="12">
+  </div>
+
+  <div class="form-group">
+    <label>Room Height (ft):</label>
+    <input type="number" id="roomHeight" value="8">
+  </div>
+
+  <div class="form-group">
+    <label>Tile Image:</label>
+    <input type="file" id="tileInput" accept="image/*">
+  </div>
+
+  <div class="form-group">
+    <label>View Type:</label>
+    <select id="viewType">
+      <option value="wall">Wall</option>
+      <option value="floor">Floor</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Tile Scale (%):</label>
+    <input type="range" id="tileScale" min="10" max="200" value="100">
+  </div>
+
+  <div class="form-group">
+    <label>Tile Rotation (degrees):</label>
+    <input type="range" id="tileRotation" min="0" max="360" value="0">
+  </div>
+
+  <div class="form-group">
+    <label>Room Background:</label>
+    <select id="roomBackground">
+      <option value="">None</option>
+      <option value="living">Living Room</option>
+      <option value="kitchen">Kitchen</option>
+      <option value="bathroom">Bathroom</option>
+    </select>
+  </div>
+</div>
+
+<div class="action-buttons">
+  <button onclick="downloadCanvas()">Download Image</button>
+  <button onclick="renderCanvas()">Preview Again</button>
+</div>
+
+<canvas id="visualizer" width="800" height="500"></canvas>
+
+<script>
+  const canvas = document.getElementById("visualizer");
+  const ctx = canvas.getContext("2d");
+
+  let tileImage = null;
+
+  const tileInput = document.getElementById("tileInput");
+
+  tileInput.addEventListener("change", function () {
+    const file = tileInput.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const img = new Image();
+      img.onload = function () {
+        tileImage = img;
+        renderCanvas();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function renderCanvas() {
+    const width = parseFloat(document.getElementById("roomWidth").value) * 40;
+    const height = parseFloat(document.getElementById("roomHeight").value) * 40;
+    const scalePercent = parseInt(document.getElementById("tileScale").value);
+    const rotation = parseInt(document.getElementById("tileRotation").value);
+    const viewType = document.getElementById("viewType").value;
+    const background = document.getElementById("roomBackground").value;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Optional room background
+    if (background !== "") {
+      const bg = new Image();
+      bg.src = `https://source.unsplash.com/800x500/?${background}`;
+      bg.onload = function () {
+        ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
+        if (tileImage) drawTiles();
+      };
+    } else {
+      if (tileImage) drawTiles();
+    }
+
+    function drawTiles() {
+      const patternCanvas = document.createElement("canvas");
+      const pCtx = patternCanvas.getContext("2d");
+
+      const scaledWidth = tileImage.width * (scalePercent / 100);
+      const scaledHeight = tileImage.height * (scalePercent / 100);
+
+      patternCanvas.width = scaledWidth;
+      patternCanvas.height = scaledHeight;
+
+      pCtx.clearRect(0, 0, scaledWidth, scaledHeight);
+      pCtx.save();
+      pCtx.translate(scaledWidth / 2, scaledHeight / 2);
+      pCtx.rotate((rotation * Math.PI) / 180);
+      pCtx.drawImage(tileImage, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+      pCtx.restore();
+
+      const pattern = ctx.createPattern(patternCanvas, "repeat");
+
+      ctx.fillStyle = pattern;
+
+      if (viewType === "wall") {
+        ctx.fillRect(0, 0, width, height);
+      } else {
+        // simulate floor as bottom half
+        ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+      }
+    }
+  }
+
+  function downloadCanvas() {
+    const link = document.createElement("a");
+    link.download = "tile-preview.png";
+    link.href = canvas.toDataURL();
+    link.click();
+  }
+</script>
+
+</body>
+</html>
