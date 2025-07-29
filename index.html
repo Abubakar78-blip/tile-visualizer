@@ -1,64 +1,130 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
   <title>Tile Visualizer</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: #f2f2f2;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: #fff;
+      padding: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin: 0.5rem 0 0.2rem;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 0.5rem;
+      margin-bottom: 1rem;
+      font-size: 1rem;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      display: block;
+      margin: 1rem auto;
+      background-color: white;
+    }
+  </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body>
+  <div class="container">
+    <h1>Tile Visualizer</h1>
 
-  <!-- Header -->
-  <header class="bg-white shadow p-4 flex justify-between items-center">
-    <h1 class="text-2xl font-bold text-blue-600">Tile Visualizer</h1>
-    <nav>
-      <a href="admin/" class="text-sm text-gray-600 hover:text-blue-600">Admin</a>
-    </nav>
-  </header>
+    <label for="width">Room Width (feet):</label>
+    <input type="number" id="width" min="1" required>
 
-  <!-- Form Section -->
-  <section class="p-6 max-w-5xl mx-auto">
-    <form id="visualizerForm" class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-6 shadow rounded-lg">
-      <!-- Room Dimensions -->
-      <div>
-        <label class="block mb-1 font-semibold">Room Width (px)</label>
-        <input type="number" id="roomWidth" class="w-full p-2 border rounded" placeholder="e.g. 800" required>
-      </div>
-      <div>
-        <label class="block mb-1 font-semibold">Room Height (px)</label>
-        <input type="number" id="roomHeight" class="w-full p-2 border rounded" placeholder="e.g. 600" required>
-      </div>
+    <label for="height">Room Height (feet):</label>
+    <input type="number" id="height" min="1" required>
 
-      <!-- Upload Tile -->
-      <div>
-        <label class="block mb-1 font-semibold">Upload Tile Image</label>
-        <input type="file" id="tileImage" accept="image/*" class="w-full p-2 border rounded bg-white" required>
-      </div>
+    <label for="rotation">Tile Rotation:</label>
+    <select id="rotation">
+      <option value="0">0°</option>
+      <option value="90">90°</option>
+      <option value="180">180°</option>
+      <option value="270">270°</option>
+    </select>
 
-      <!-- Orientation -->
-      <div>
-        <label class="block mb-1 font-semibold">Tile Orientation</label>
-        <select id="orientation" class="w-full p-2 border rounded">
-          <option value="0">0°</option>
-          <option value="90">90°</option>
-          <option value="180">180°</option>
-          <option value="270">270°</option>
-        </select>
-      </div>
+    <label for="tile">Upload Tile Image:</label>
+    <input type="file" id="tile" accept="image/*" required>
 
-      <div class="md:col-span-2 text-right">
-        <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">Visualize</button>
-      </div>
-    </form>
-  </section>
+    <button onclick="generateVisualization()">Visualize Room</button>
 
-  <!-- Visualization Canvas -->
-  <section class="max-w-5xl mx-auto p-6">
-    <div id="visualization" class="border bg-white shadow rounded-lg overflow-hidden" style="width: 100%; min-height: 400px; position: relative;">
-      <canvas id="tileCanvas" class="w-full h-full"></canvas>
-    </div>
-  </section>
+    <canvas id="canvas" width="900" height="600"></canvas>
+  </div>
 
-  <script src="script.js"></script>
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    function generateVisualization() {
+      const roomWidthFt = parseFloat(document.getElementById("width").value);
+      const roomHeightFt = parseFloat(document.getElementById("height").value);
+      const rotation = parseInt(document.getElementById("rotation").value);
+      const tileFile = document.getElementById("tile").files[0];
+
+      if (!roomWidthFt || !roomHeightFt || !tileFile) {
+        alert("Please provide all inputs.");
+        return;
+      }
+
+      // Convert feet to pixels (1 foot = 30px)
+      const scale = 30;
+      const canvasWidth = roomWidthFt * scale;
+      const canvasHeight = roomHeightFt * scale;
+
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+
+      const img = new Image();
+      img.onload = function () {
+        // Rotate image if needed
+        const tileCanvas = document.createElement("canvas");
+        const tctx = tileCanvas.getContext("2d");
+
+        if (rotation === 90 || rotation === 270) {
+          tileCanvas.width = img.height;
+          tileCanvas.height = img.width;
+        } else {
+          tileCanvas.width = img.width;
+          tileCanvas.height = img.height;
+        }
+
+        tctx.save();
+        tctx.translate(tileCanvas.width / 2, tileCanvas.height / 2);
+        tctx.rotate((rotation * Math.PI) / 180);
+        tctx.drawImage(img, -img.width / 2, -img.height / 2);
+        tctx.restore();
+
+        const tilePattern = tctx.getImageData(0, 0, tileCanvas.width, tileCanvas.height);
+
+        // AI Logic: Auto-fill tiles across room
+        for (let y = 0; y < canvasHeight; y += tileCanvas.height) {
+          for (let x = 0; x < canvasWidth; x += tileCanvas.width) {
+            ctx.putImageData(tilePattern, x, y);
+          }
+        }
+      };
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(tileFile);
+    }
+  </script>
 </body>
 </html>
