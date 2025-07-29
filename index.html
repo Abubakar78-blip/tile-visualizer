@@ -1,129 +1,137 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Tile Visualizer</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Tile Visualizer</title>
   <style>
     body {
       font-family: Arial, sans-serif;
+      background: #f8f8f8;
       margin: 0;
-      padding: 2rem;
-      background: #f2f2f2;
+      padding: 20px;
     }
     h1 {
       text-align: center;
       color: #333;
     }
     .container {
-      max-width: 800px;
+      max-width: 900px;
       margin: auto;
-      background: #fff;
-      padding: 1.5rem;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+    .form-group {
+      margin-bottom: 15px;
     }
     label {
       display: block;
-      margin: 0.5rem 0 0.2rem;
+      font-weight: bold;
+      margin-bottom: 5px;
     }
-    input, select, button {
+    input[type="number"], input[type="file"], select {
       width: 100%;
-      padding: 0.5rem;
-      margin-bottom: 1rem;
-      font-size: 1rem;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      background-color: #0066cc;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
     }
     canvas {
+      margin-top: 20px;
+      width: 100%;
       border: 1px solid #ccc;
-      display: block;
-      margin: 1rem auto;
-      background-color: white;
+      border-radius: 8px;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Tile Visualizer</h1>
+    <h1>AI Tile Visualizer</h1>
 
-    <label for="width">Room Width (feet):</label>
-    <input type="number" id="width" min="1" required>
+    <div class="form-group">
+      <label for="width">Room Width (in feet):</label>
+      <input type="number" id="width" placeholder="e.g. 12" required />
+    </div>
 
-    <label for="height">Room Height (feet):</label>
-    <input type="number" id="height" min="1" required>
+    <div class="form-group">
+      <label for="height">Room Height (in feet):</label>
+      <input type="number" id="height" placeholder="e.g. 10" required />
+    </div>
 
-    <label for="rotation">Tile Rotation:</label>
-    <select id="rotation">
-      <option value="0">0°</option>
-      <option value="90">90°</option>
-      <option value="180">180°</option>
-      <option value="270">270°</option>
-    </select>
+    <div class="form-group">
+      <label for="tile">Upload Tile Image:</label>
+      <input type="file" id="tile" accept="image/*" required />
+    </div>
 
-    <label for="tile">Upload Tile Image:</label>
-    <input type="file" id="tile" accept="image/*" required>
+    <div class="form-group">
+      <label for="rotation">Tile Orientation:</label>
+      <select id="rotation">
+        <option value="0">0° (Default)</option>
+        <option value="90">90°</option>
+        <option value="180">180°</option>
+        <option value="270">270°</option>
+      </select>
+    </div>
 
-    <button onclick="generateVisualization()">Visualize Room</button>
+    <button onclick="visualize()">Visualize Room</button>
 
-    <canvas id="canvas" width="900" height="600"></canvas>
+    <canvas id="roomCanvas" width="600" height="400"></canvas>
   </div>
 
   <script>
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
+    function visualize() {
+      const widthFt = parseFloat(document.getElementById('width').value);
+      const heightFt = parseFloat(document.getElementById('height').value);
+      const fileInput = document.getElementById('tile');
+      const rotation = parseInt(document.getElementById('rotation').value);
+      const canvas = document.getElementById('roomCanvas');
+      const ctx = canvas.getContext('2d');
 
-    function generateVisualization() {
-      const roomWidthFt = parseFloat(document.getElementById("width").value);
-      const roomHeightFt = parseFloat(document.getElementById("height").value);
-      const rotation = parseInt(document.getElementById("rotation").value);
-      const tileFile = document.getElementById("tile").files[0];
-
-      if (!roomWidthFt || !roomHeightFt || !tileFile) {
-        alert("Please provide all inputs.");
+      if (!widthFt || !heightFt || !fileInput.files[0]) {
+        alert("Please fill all fields and upload an image.");
         return;
       }
 
-      // Convert feet to pixels (1 foot = 30px)
-      const scale = 30;
-      const canvasWidth = roomWidthFt * scale;
-      const canvasHeight = roomHeightFt * scale;
-
-      canvas.width = canvasWidth;
-      canvas.height = canvasHeight;
+      // 1 foot = 30px for visual scaling
+      const pxPerFoot = 30;
+      canvas.width = widthFt * pxPerFoot;
+      canvas.height = heightFt * pxPerFoot;
 
       const img = new Image();
-      img.onload = function () {
-        // Rotate image if needed
-        const tileCanvas = document.createElement("canvas");
-        const tctx = tileCanvas.getContext("2d");
+      img.onload = () => {
+        const tileW = rotation % 180 === 0 ? img.width : img.height;
+        const tileH = rotation % 180 === 0 ? img.height : img.width;
 
-        if (rotation === 90 || rotation === 270) {
-          tileCanvas.width = img.height;
-          tileCanvas.height = img.width;
-        } else {
-          tileCanvas.width = img.width;
-          tileCanvas.height = img.height;
-        }
+        const scale = 1;
+        const scaledTileW = tileW * scale;
+        const scaledTileH = tileH * scale;
 
-        tctx.save();
-        tctx.translate(tileCanvas.width / 2, tileCanvas.height / 2);
-        tctx.rotate((rotation * Math.PI) / 180);
-        tctx.drawImage(img, -img.width / 2, -img.height / 2);
-        tctx.restore();
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const tilePattern = tctx.getImageData(0, 0, tileCanvas.width, tileCanvas.height);
-
-        // AI Logic: Auto-fill tiles across room
-        for (let y = 0; y < canvasHeight; y += tileCanvas.height) {
-          for (let x = 0; x < canvasWidth; x += tileCanvas.width) {
-            ctx.putImageData(tilePattern, x, y);
+        // AI-assisted tiling: Repeat tile across canvas
+        for (let y = 0; y < canvas.height; y += scaledTileH) {
+          for (let x = 0; x < canvas.width; x += scaledTileW) {
+            ctx.save();
+            ctx.translate(x + scaledTileW/2, y + scaledTileH/2);
+            ctx.rotate((rotation * Math.PI) / 180);
+            ctx.drawImage(img, -scaledTileW/2, -scaledTileH/2, scaledTileW, scaledTileH);
+            ctx.restore();
           }
         }
       };
 
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(tileFile);
+      img.src = URL.createObjectURL(fileInput.files[0]);
     }
   </script>
 </body>
