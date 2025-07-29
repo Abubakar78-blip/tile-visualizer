@@ -1,154 +1,355 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AI Tile Visualizer</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #f0f4f8;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    header {
-      width: 100%;
-      padding: 20px;
-      background: linear-gradient(90deg, #00796b, #009688);
-      color: white;
-      text-align: center;
-      font-size: 24px;
-      font-weight: bold;
-    }
-
-    .container {
-      margin-top: 30px;
-      width: 90%;
-      max-width: 800px;
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-
-    label {
-      display: block;
-      margin: 12px 0 6px;
-      font-weight: bold;
-    }
-
-    input[type="number"],
-    input[type="file"] {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 10px;
-    }
-
-    button {
-      padding: 12px 20px;
-      background: #00796b;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-
-    canvas {
-      margin-top: 30px;
-      border: 1px solid #ccc;
-      background: #eaeaea;
-      max-width: 100%;
-    }
-
-    footer {
-      margin-top: 40px;
-      padding: 20px;
-      text-align: center;
-      color: #777;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>5D Tile Visualizer</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        #container { display: flex; height: 100vh; }
+        #controls { 
+            width: 300px; 
+            padding: 20px; 
+            background: #f5f5f5; 
+            overflow-y: auto; 
+        }
+        #visualizer { flex: 1; }
+        .control-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 8px; margin-bottom: 10px; }
+        button { 
+            background: #4CAF50; 
+            color: white; 
+            border: none; 
+            padding: 10px 15px; 
+            cursor: pointer; 
+            width: 100%; 
+        }
+        button:hover { background: #45a049; }
+        #stats { margin-top: 20px; padding: 10px; background: #e9e9e9; }
+    </style>
 </head>
 <body>
-  <header>AI Tile Visualizer</header>
-  <div class="container">
-    <label for="width">Room Width (ft)</label>
-    <input type="number" id="roomWidth" placeholder="Enter width in feet" min="1" required>
+    <div id="container">
+        <div id="controls">
+            <h2>5D Tile Visualizer</h2>
+            
+            <div class="control-group">
+                <label for="tileType">Tiling Option:</label>
+                <select id="tileType">
+                    <option value="floor">Floor Only</option>
+                    <option value="full">Floor + Walls</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="roomWidth">Room Width (feet):</label>
+                <input type="number" id="roomWidth" value="10" min="1" step="0.1">
+                
+                <label for="roomDepth">Room Depth (feet):</label>
+                <input type="number" id="roomDepth" value="12" min="1" step="0.1">
+                
+                <label for="roomHeight">Room Height (feet):</label>
+                <input type="number" id="roomHeight" value="8" min="1" step="0.1">
+            </div>
+            
+            <div class="control-group">
+                <label for="tileWidth">Tile Width (inches):</label>
+                <input type="number" id="tileWidth" value="12" min="1" step="0.1">
+                
+                <label for="tileHeight">Tile Height (inches):</label>
+                <input type="number" id="tileHeight" value="12" min="1" step="0.1">
+            </div>
+            
+            <div class="control-group">
+                <label for="tileTexture">Tile Texture:</label>
+                <input type="file" id="tileTexture" accept="image/*">
+                <p>Or use default texture</p>
+            </div>
+            
+            <button id="generateBtn">Generate 3D Visualization</button>
+            
+            <div id="stats">
+                <h3>Tile Statistics</h3>
+                <p id="tileCount">Tiles needed: -</p>
+                <p id="floorArea">Floor area: - sq ft</p>
+                <p id="wallArea">Wall area: - sq ft</p>
+            </div>
+        </div>
+        
+        <div id="visualizer"></div>
+    </div>
 
-    <label for="height">Room Height (ft)</label>
-    <input type="number" id="roomHeight" placeholder="Enter height in feet" min="1" required>
-
-    <label for="tileImage">Upload Tile Image</label>
-    <input type="file" id="tileImage" accept="image/*" required>
-
-    <label for="rotation">Tile Orientation (degrees)</label>
-    <input type="number" id="tileRotation" placeholder="0 for normal, 90 for rotated" value="0">
-
-    <button onclick="generateVisualizer()">Visualize Room</button>
-
-    <canvas id="tileCanvas"></canvas>
-  </div>
-
-  <footer>© 2025 Tile Visualizer | Built with ♥️ by Abubakar</footer>
-
-  <script>
-    function generateVisualizer() {
-      const roomWidth = parseFloat(document.getElementById('roomWidth').value);
-      const roomHeight = parseFloat(document.getElementById('roomHeight').value);
-      const tileRotation = parseInt(document.getElementById('tileRotation').value) || 0;
-      const tileFile = document.getElementById('tileImage').files[0];
-      const canvas = document.getElementById('tileCanvas');
-      const ctx = canvas.getContext('2d');
-
-      if (!roomWidth || !roomHeight || !tileFile) {
-        alert('Please fill all fields and upload an image!');
-        return;
-      }
-
-      const scale = 30; // 1 foot = 30 pixels
-      const canvasWidth = roomWidth * scale;
-      const canvasHeight = roomHeight * scale;
-
-      canvas.width = canvasWidth;
-      canvas.height = canvasHeight;
-
-      const img = new Image();
-      img.onload = () => {
-        let tileW = img.width;
-        let tileH = img.height;
-
-        // Rotate tile if needed
-        if (tileRotation % 180 === 90) {
-          [tileW, tileH] = [tileH, tileW];
+    <script>
+        // Global variables
+        let scene, camera, renderer, controls, room, floor, walls = [];
+        let tileTexture = null;
+        
+        // Initialize the application
+        function init() {
+            // Set up Three.js scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(15, 15, 15);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth - 300, window.innerHeight);
+            document.getElementById('visualizer').appendChild(renderer.domElement);
+            
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            scene.add(directionalLight);
+            
+            // Add grid helper
+            const gridHelper = new THREE.GridHelper(50, 50);
+            scene.add(gridHelper);
+            
+            // Add axes helper
+            const axesHelper = new THREE.AxesHelper(5);
+            scene.add(axesHelper);
+            
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            document.getElementById('generateBtn').addEventListener('click', generateRoom);
+            
+            // Start animation loop
+            animate();
         }
-
-        // Scale tile to a fixed pixel size (or calculate ratio)
-        const scaledTileWidth = 80;
-        const scaledTileHeight = 80;
-
-        const cols = Math.ceil(canvasWidth / scaledTileWidth);
-        const rows = Math.ceil(canvasHeight / scaledTileHeight);
-
-        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-
-        for (let y = 0; y < rows; y++) {
-          for (let x = 0; x < cols; x++) {
-            ctx.save();
-            const posX = x * scaledTileWidth;
-            const posY = y * scaledTileHeight;
-            ctx.translate(posX + scaledTileWidth / 2, posY + scaledTileHeight / 2);
-            ctx.rotate((tileRotation * Math.PI) / 180);
-            ctx.drawImage(img, -scaledTileWidth / 2, -scaledTileHeight / 2, scaledTileWidth, scaledTileHeight);
-            ctx.restore();
-          }
+        
+        // Generate room based on user input
+        function generateRoom() {
+            // Clear previous room if exists
+            if (room) {
+                scene.remove(room);
+                if (floor) scene.remove(floor);
+                walls.forEach(wall => scene.remove(wall));
+                walls = [];
+            }
+            
+            // Get user inputs
+            const tileType = document.getElementById('tileType').value;
+            const roomWidth = parseFloat(document.getElementById('roomWidth').value);
+            const roomDepth = parseFloat(document.getElementById('roomDepth').value);
+            const roomHeight = parseFloat(document.getElementById('roomHeight').value);
+            const tileWidth = parseFloat(document.getElementById('tileWidth').value) / 12; // Convert inches to feet
+            const tileHeight = parseFloat(document.getElementById('tileHeight').value) / 12; // Convert inches to feet
+            
+            // Convert feet to Three.js units (1 unit = 1 foot)
+            const width = roomWidth;
+            const depth = roomDepth;
+            const height = roomHeight;
+            
+            // Create room group
+            room = new THREE.Group();
+            
+            // Create floor
+            const floorGeometry = new THREE.PlaneGeometry(width, depth);
+            floorGeometry.rotateX(-Math.PI / 2);
+            
+            // Create walls if needed
+            if (tileType === 'full') {
+                const wallThickness = 0.2;
+                
+                // Wall 1 (left)
+                const wall1Geometry = new THREE.PlaneGeometry(depth, height);
+                wall1Geometry.rotateY(Math.PI / 2);
+                const wall1 = new THREE.Mesh(wall1Geometry, new THREE.MeshStandardMaterial({ color: 0xdddddd }));
+                wall1.position.set(-width/2, height/2, 0);
+                walls.push(wall1);
+                
+                // Wall 2 (right)
+                const wall2Geometry = new THREE.PlaneGeometry(depth, height);
+                wall2Geometry.rotateY(-Math.PI / 2);
+                const wall2 = new THREE.Mesh(wall2Geometry, new THREE.MeshStandardMaterial({ color: 0xdddddd }));
+                wall2.position.set(width/2, height/2, 0);
+                walls.push(wall2);
+                
+                // Wall 3 (back)
+                const wall3Geometry = new THREE.PlaneGeometry(width, height);
+                const wall3 = new THREE.Mesh(wall3Geometry, new THREE.MeshStandardMaterial({ color: 0xdddddd }));
+                wall3.position.set(0, height/2, -depth/2);
+                walls.push(wall3);
+                
+                // Wall 4 (front - partial for viewing)
+                const wall4Geometry = new THREE.PlaneGeometry(width, height);
+                const wall4 = new THREE.Mesh(wall4Geometry, new THREE.MeshStandardMaterial({ color: 0xdddddd }));
+                wall4.position.set(0, height/2, depth/2);
+                walls.push(wall4);
+            }
+            
+            // Handle texture loading
+            const fileInput = document.getElementById('tileTexture');
+            const file = fileInput.files[0];
+            
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const textureLoader = new THREE.TextureLoader();
+                    textureLoader.load(event.target.result, function(texture) {
+                        texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        
+                        // Calculate repeat counts based on tile dimensions
+                        const repeatX = width / tileWidth;
+                        const repeatY = depth / tileHeight;
+                        texture.repeat.set(repeatX, repeatY);
+                        
+                        // Create floor with texture
+                        const floorMaterial = new THREE.MeshStandardMaterial({ 
+                            map: texture,
+                            roughness: 0.3,
+                            metalness: 0.1
+                        });
+                        
+                        floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                        floor.receiveShadow = true;
+                        room.add(floor);
+                        
+                        // Create walls with texture if full option selected
+                        if (tileType === 'full') {
+                            const wallRepeatX = depth / tileWidth;
+                            const wallRepeatY = height / tileHeight;
+                            
+                            // Left and right walls
+                            const sideWallTexture = texture.clone();
+                            sideWallTexture.repeat.set(wallRepeatX, wallRepeatY);
+                            
+                            walls[0].material.map = sideWallTexture;
+                            walls[1].material.map = sideWallTexture.clone();
+                            
+                            // Front and back walls
+                            const frontBackWallTexture = texture.clone();
+                            frontBackWallTexture.repeat.set(width / tileWidth, height / tileHeight);
+                            
+                            walls[2].material.map = frontBackWallTexture;
+                            walls[3].material.map = frontBackWallTexture.clone();
+                            
+                            // Update wall materials
+                            walls.forEach(wall => {
+                                wall.material.needsUpdate = true;
+                                wall.castShadow = true;
+                                wall.receiveShadow = true;
+                                room.add(wall);
+                            });
+                        }
+                        
+                        scene.add(room);
+                        
+                        // Calculate and display statistics
+                        updateStatistics(width, depth, height, tileWidth, tileHeight, tileType);
+                    });
+                };
+                reader.readAsDataURL(file);
+            } else {
+                // Use default texture
+                const textureLoader = new THREE.TextureLoader();
+                textureLoader.load('https://threejs.org/examples/textures/brick_diffuse.jpg', function(texture) {
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    
+                    const repeatX = width / tileWidth;
+                    const repeatY = depth / tileHeight;
+                    texture.repeat.set(repeatX, repeatY);
+                    
+                    const floorMaterial = new THREE.MeshStandardMaterial({ 
+                        map: texture,
+                        roughness: 0.3,
+                        metalness: 0.1
+                    });
+                    
+                    floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                    floor.receiveShadow = true;
+                    room.add(floor);
+                    
+                    if (tileType === 'full') {
+                        const wallRepeatX = depth / tileWidth;
+                        const wallRepeatY = height / tileHeight;
+                        
+                        // Left and right walls
+                        const sideWallTexture = texture.clone();
+                        sideWallTexture.repeat.set(wallRepeatX, wallRepeatY);
+                        
+                        walls[0].material.map = sideWallTexture;
+                        walls[1].material.map = sideWallTexture.clone();
+                        
+                        // Front and back walls
+                        const frontBackWallTexture = texture.clone();
+                        frontBackWallTexture.repeat.set(width / tileWidth, height / tileHeight);
+                        
+                        walls[2].material.map = frontBackWallTexture;
+                        walls[3].material.map = frontBackWallTexture.clone();
+                        
+                        walls.forEach(wall => {
+                            wall.material.needsUpdate = true;
+                            wall.castShadow = true;
+                            wall.receiveShadow = true;
+                            room.add(wall);
+                        });
+                    }
+                    
+                    scene.add(room);
+                    
+                    // Calculate and display statistics
+                    updateStatistics(width, depth, height, tileWidth, tileHeight, tileType);
+                });
+            }
         }
-      };
-      img.src = URL.createObjectURL(tileFile);
-    }
-  </script>
+        
+        // Update statistics display
+        function updateStatistics(width, depth, height, tileWidth, tileHeight, tileType) {
+            const floorArea = width * depth;
+            const floorTiles = Math.ceil(width / tileWidth) * Math.ceil(depth / tileHeight);
+            
+            let wallArea = 0;
+            let wallTiles = 0;
+            
+            if (tileType === 'full') {
+                wallArea = 2 * (width * height) + 2 * (depth * height);
+                wallTiles = 2 * Math.ceil(width / tileWidth) * Math.ceil(height / tileHeight) + 
+                             2 * Math.ceil(depth / tileWidth) * Math.ceil(height / tileHeight);
+            }
+            
+            const totalTiles = floorTiles + wallTiles;
+            const totalArea = floorArea + wallArea;
+            
+            document.getElementById('tileCount').textContent = `Tiles needed: ${totalTiles}`;
+            document.getElementById('floorArea').textContent = `Floor area: ${floorArea.toFixed(2)} sq ft`;
+            document.getElementById('wallArea').textContent = tileType === 'full' 
+                ? `Wall area: ${wallArea.toFixed(2)} sq ft` 
+                : `Wall area: Not tiled`;
+        }
+        
+        // Handle window resize
+        function onWindowResize() {
+            camera.aspect = (window.innerWidth - 300) / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth - 300, window.innerHeight);
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        // Initialize the app
+        init();
+    </script>
 </body>
 </html>
