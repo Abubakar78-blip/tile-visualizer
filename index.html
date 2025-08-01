@@ -2,11 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced 5D Tile Visualizer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>5D Tile Visualizer</title>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
     <style>
         :root {
             --primary-color: #4a6fa5;
@@ -18,23 +17,25 @@
             margin: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             overflow: hidden;
+            touch-action: none;
         }
         #app {
             display: flex;
             height: 100vh;
+            flex-direction: column;
         }
         #toolbar {
-            width: 60px;
+            width: 100%;
             background: var(--dark-color);
             display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding-top: 20px;
+            padding: 10px;
+            overflow-x: auto;
+            z-index: 100;
         }
         .tool-btn {
-            width: 40px;
-            height: 40px;
-            margin-bottom: 15px;
+            width: 50px;
+            height: 50px;
+            margin: 0 5px;
             background: var(--secondary-color);
             border: none;
             border-radius: 4px;
@@ -44,20 +45,25 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
+            flex-shrink: 0;
         }
         .tool-btn.active {
             background: var(--primary-color);
         }
-        .tool-btn:hover {
-            transform: scale(1.1);
-        }
         #sidebar {
-            width: 300px;
+            position: fixed;
+            top: 70px;
+            left: -300px;
+            width: 250px;
+            height: calc(100% - 70px);
             background: white;
-            border-right: 1px solid #ddd;
-            display: flex;
-            flex-direction: column;
+            transition: transform 0.3s ease;
+            z-index: 90;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        #sidebar.open {
+            transform: translateX(300px);
         }
         #sidebar-header {
             padding: 15px;
@@ -65,8 +71,6 @@
             font-weight: bold;
         }
         #sidebar-content {
-            flex: 1;
-            overflow-y: auto;
             padding: 15px;
         }
         #viewer-container {
@@ -87,6 +91,7 @@
             border-radius: 4px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             overflow: hidden;
+            z-index: 10;
         }
         .mode-btn {
             padding: 8px 15px;
@@ -100,14 +105,20 @@
             color: white;
         }
         #stats-panel {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255,255,255,0.9);
+            position: fixed;
+            top: 70px;
+            right: -300px;
+            width: 250px;
+            height: calc(100% - 70px);
+            background: rgba(255,255,255,0.95);
+            transition: transform 0.3s ease;
+            z-index: 90;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
             padding: 15px;
-            border-radius: 4px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            min-width: 200px;
+            overflow-y: auto;
+        }
+        #stats-panel.open {
+            transform: translateX(-300px);
         }
         .stat-item {
             margin-bottom: 8px;
@@ -154,38 +165,21 @@
             padding: 10px;
             border-radius: 4px;
             display: none;
-        }
-        .top-bar {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: rgba(255,255,255,0.9);
-            padding: 10px 20px;
-            display: flex;
-            justify-content: space-between;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .top-bar-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-weight: 500;
-            padding: 5px 10px;
-            border-radius: 4px;
-        }
-        .top-bar-btn:hover {
-            background: #f0f0f0;
+            z-index: 10;
         }
         #room-dimensions {
-            position: absolute;
-            top: 60px;
-            left: 20px;
-            background: rgba(255,255,255,0.9);
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.95);
             padding: 15px;
             border-radius: 4px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: none;
+            z-index: 100;
+            width: 80%;
+            max-width: 400px;
         }
         .dimension-input {
             margin-bottom: 10px;
@@ -197,31 +191,141 @@
         }
         .dimension-input input {
             width: 100%;
-            padding: 5px;
-        }
-        .cursor-crosshair {
-            cursor: crosshair;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
         #tile-size-panel {
-            position: absolute;
-            top: 60px;
-            left: 20px;
-            background: rgba(255,255,255,0.9);
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.95);
             padding: 15px;
             border-radius: 4px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: none;
+            z-index: 100;
+            width: 80%;
+            max-width: 400px;
+        }
+        #scan-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            display: none;
+        }
+        #scan-view {
+            width: 90%;
+            height: 60%;
+            background: #000;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        #scan-controls {
+            display: flex;
+            flex-direction: column;
+            width: 90%;
+        }
+        #scan-button {
+            padding: 12px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        #cancel-scan {
+            padding: 12px;
+            background: var(--secondary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        #scan-results {
+            color: white;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .menu-toggle {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            width: 40px;
+            height: 40px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 20px;
+            z-index: 110;
+            display: none;
+        }
+        .stats-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 20px;
+            z-index: 110;
+            display: none;
+        }
+        @media (max-width: 768px) {
+            #toolbar {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                z-index: 100;
+            }
+            #sidebar {
+                top: 0;
+                left: -250px;
+                height: 100%;
+            }
+            #sidebar.open {
+                transform: translateX(250px);
+            }
+            #stats-panel {
+                top: 0;
+                right: -250px;
+                height: 100%;
+            }
+            #stats-panel.open {
+                transform: translateX(-250px);
+            }
+            .menu-toggle, .stats-toggle {
+                display: block;
+            }
         }
     </style>
 </head>
 <body>
     <div id="app">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <button class="stats-toggle" id="stats-toggle">$</button>
+        
         <div id="toolbar">
             <button class="tool-btn active" title="Select" id="btn-select">✏️</button>
             <button class="tool-btn" title="Wall" id="btn-wall">🧱</button>
             <button class="tool-btn" title="Door" id="btn-door">🚪</button>
             <button class="tool-btn" title="Window" id="btn-window">🪟</button>
-            <div style="flex: 1;"></div>
+            <button class="tool-btn" title="Scan Room" id="btn-scan">📷</button>
             <button class="tool-btn" title="Tile Size" id="btn-tile-size">📏</button>
             <button class="tool-btn" title="Settings" id="btn-settings">⚙️</button>
         </div>
@@ -256,77 +360,88 @@
         </div>
         
         <div id="viewer-container">
-            <div class="top-bar">
-                <div>
-                    <button class="top-bar-btn" id="btn-dimensions">Room Dimensions</button>
-                </div>
-                <div>
-                    <button class="top-bar-btn" id="btn-save">Save Project</button>
-                    <button class="top-bar-btn" id="btn-share">Share</button>
-                </div>
-            </div>
-            
-            <div id="room-dimensions">
-                <div class="dimension-input">
-                    <label>Width (ft)</label>
-                    <input type="number" id="room-width" value="12" min="5" max="50">
-                </div>
-                <div class="dimension-input">
-                    <label>Depth (ft)</label>
-                    <input type="number" id="room-depth" value="10" min="5" max="50">
-                </div>
-                <div class="dimension-input">
-                    <label>Height (ft)</label>
-                    <input type="number" id="room-height" value="8" min="5" max="20">
-                </div>
-                <button id="btn-update-room" style="width: 100%; padding: 8px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer;">Update Room</button>
-            </div>
-            
-            <div id="tile-size-panel">
-                <div class="dimension-input">
-                    <label>Tile Width (inches)</label>
-                    <input type="number" id="tile-width" value="12" min="1" step="0.1">
-                </div>
-                <div class="dimension-input">
-                    <label>Tile Height (inches)</label>
-                    <input type="number" id="tile-height" value="12" min="1" step="0.1">
-                </div>
-                <button id="btn-update-tile-size" style="width: 100%; padding: 8px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer;">Update Tile Size</button>
-            </div>
-            
             <div id="viewer"></div>
             
             <div id="mode-switcher">
                 <button class="mode-btn active" data-mode="2d">2D</button>
                 <button class="mode-btn" data-mode="3d">3D</button>
-                <button class="mode-btn" data-mode="fp">First Person</button>
-            </div>
-            
-            <div id="stats-panel">
-                <div class="stat-item">
-                    <div class="stat-label">Floor Area</div>
-                    <div class="stat-value" id="stat-floor">120 sq.ft</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Wall Area</div>
-                    <div class="stat-value" id="stat-walls">352 sq.ft</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Tile Count</div>
-                    <div class="stat-value" id="stat-tile-count">0</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Tile Cost</div>
-                    <div class="stat-value" id="stat-cost">$1,416.00</div>
-                </div>
+                <button class="mode-btn" data-mode="fp">FP</button>
             </div>
             
             <div id="first-person-ui">
                 WASD to move, SPACE to jump, ESC to exit
             </div>
         </div>
+        
+        <div id="stats-panel">
+            <h3>Project Details</h3>
+            <div class="stat-item">
+                <div class="stat-label">Floor Area</div>
+                <div class="stat-value" id="stat-floor">0 sq.ft</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Wall Area</div>
+                <div class="stat-value" id="stat-walls">0 sq.ft</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Tile Count</div>
+                <div class="stat-value" id="stat-tile-count">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Tile Cost</div>
+                <div class="stat-value" id="stat-cost">$0.00</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Installation Cost</div>
+                <div class="stat-value" id="stat-install-cost">$0.00</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Total Cost</div>
+                <div class="stat-value" id="stat-total-cost">$0.00</div>
+            </div>
+        </div>
+        
+        <div id="room-dimensions">
+            <h3>Room Dimensions</h3>
+            <div class="dimension-input">
+                <label>Width (ft)</label>
+                <input type="number" id="room-width" value="12" min="5" max="50">
+            </div>
+            <div class="dimension-input">
+                <label>Depth (ft)</label>
+                <input type="number" id="room-depth" value="10" min="5" max="50">
+            </div>
+            <div class="dimension-input">
+                <label>Height (ft)</label>
+                <input type="number" id="room-height" value="8" min="5" max="20">
+            </div>
+            <button id="btn-update-room" style="width: 100%; padding: 8px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px;">Update Room</button>
+        </div>
+        
+        <div id="tile-size-panel">
+            <h3>Tile Size</h3>
+            <div class="dimension-input">
+                <label>Tile Width (inches)</label>
+                <input type="number" id="tile-width" value="12" min="1" step="0.1">
+            </div>
+            <div class="dimension-input">
+                <label>Tile Height (inches)</label>
+                <input type="number" id="tile-height" value="12" min="1" step="0.1">
+            </div>
+            <button id="btn-update-tile-size" style="width: 100%; padding: 8px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px;">Update Tile Size</button>
+        </div>
+        
+        <div id="scan-panel">
+            <div id="scan-view"></div>
+            <div id="scan-controls">
+                <button id="scan-button">Start Scanning</button>
+                <button id="cancel-scan">Cancel</button>
+            </div>
+            <div id="scan-results">
+                Move your device slowly around the room to scan
+            </div>
+        </div>
     </div>
-
     <script>
         // Main Application
         class TileVisualizer {
@@ -346,6 +461,7 @@
                 this.roomDepth = 10;
                 this.roomHeight = 8;
                 this.tilePrice = 3.50;
+                this.installationRate = 4.50;
                 this.tileWidth = 12; // inches
                 this.tileHeight = 12; // inches
                 this.isDrawing = false;
@@ -353,10 +469,14 @@
                 this.tempWall = null;
                 this.doors = [];
                 this.windows = [];
+                this.obstacles = [];
+                this.isScanning = false;
+                this.scannedDimensions = null;
                 
                 this.init();
                 this.setupEventListeners();
                 this.createRoom();
+                this.checkMobile();
             }
             
             init() {
@@ -365,13 +485,12 @@
                 this.scene.background = new THREE.Color(0xf0f0f0);
                 
                 // Camera
-                this.camera = new THREE.PerspectiveCamera(60, (window.innerWidth - 360) / window.innerHeight, 0.1, 1000);
+                this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
                 this.camera.position.set(15, 15, 15);
                 
                 // Renderer
                 this.renderer = new THREE.WebGLRenderer({ antialias: true });
-                this.renderer.setSize(window.innerWidth - 360, window.innerHeight);
-                // Shadows removed as requested
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
                 document.getElementById('viewer').appendChild(this.renderer.domElement);
                 
                 // Controls
@@ -382,7 +501,7 @@
                 // First-person controls (initially inactive)
                 this.fpControls = new THREE.PointerLockControls(this.camera, document.body);
                 
-                // Lighting (simplified without shadows)
+                // Lighting
                 this.setupLighting();
                 
                 // Grid helper
@@ -391,6 +510,14 @@
                 
                 // Start animation loop
                 this.animate();
+            }
+            
+            checkMobile() {
+                this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                if (this.isMobile) {
+                    document.getElementById('menu-toggle').style.display = 'block';
+                    document.getElementById('stats-toggle').style.display = 'block';
+                }
             }
             
             setupLighting() {
@@ -413,11 +540,12 @@
                 // Window resize
                 window.addEventListener('resize', () => this.onWindowResize());
                 
-                // Tool buttons - now fully functional
+                // Tool buttons
                 document.getElementById('btn-select').addEventListener('click', () => this.setTool('select'));
                 document.getElementById('btn-wall').addEventListener('click', () => this.setTool('wall'));
                 document.getElementById('btn-door').addEventListener('click', () => this.setTool('door'));
                 document.getElementById('btn-window').addEventListener('click', () => this.setTool('window'));
+                document.getElementById('btn-scan').addEventListener('click', () => this.startRoomScan());
                 document.getElementById('btn-tile-size').addEventListener('click', () => {
                     document.getElementById('tile-size-panel').style.display = 'block';
                 });
@@ -439,11 +567,6 @@
                 });
                 
                 // Room dimensions
-                document.getElementById('btn-dimensions').addEventListener('click', () => {
-                    const panel = document.getElementById('room-dimensions');
-                    panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
-                });
-                
                 document.getElementById('btn-update-room').addEventListener('click', () => {
                     this.roomWidth = parseFloat(document.getElementById('room-width').value);
                     this.roomDepth = parseFloat(document.getElementById('room-depth').value);
@@ -489,10 +612,126 @@
                     }
                 });
                 
+                // Mobile menu toggles
+                document.getElementById('menu-toggle').addEventListener('click', () => {
+                    document.getElementById('sidebar').classList.toggle('open');
+                });
+                
+                document.getElementById('stats-toggle').addEventListener('click', () => {
+                    document.getElementById('stats-panel').classList.toggle('open');
+                });
+                
+                // Scan controls
+                document.getElementById('scan-button').addEventListener('click', () => this.scanRoom());
+                document.getElementById('cancel-scan').addEventListener('click', () => {
+                    document.getElementById('scan-panel').style.display = 'none';
+                    this.isScanning = false;
+                });
+                
+                // Close panels when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('#room-dimensions') && !e.target.closest('#btn-dimensions')) {
+                        document.getElementById('room-dimensions').style.display = 'none';
+                    }
+                    if (!e.target.closest('#tile-size-panel') && !e.target.closest('#btn-tile-size')) {
+                        document.getElementById('tile-size-panel').style.display = 'none';
+                    }
+                });
+                
                 // Mouse events for drawing
                 this.renderer.domElement.addEventListener('mousedown', (e) => this.onMouseDown(e));
                 this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
                 this.renderer.domElement.addEventListener('mouseup', () => this.onMouseUp());
+                
+                // Touch events for mobile
+                this.renderer.domElement.addEventListener('touchstart', (e) => this.onTouchStart(e));
+                this.renderer.domElement.addEventListener('touchmove', (e) => this.onTouchMove(e));
+                this.renderer.domElement.addEventListener('touchend', () => this.onTouchEnd());
+            }
+            
+            startRoomScan() {
+                if (this.isMobile) {
+                    // On mobile, show the scan panel
+                    document.getElementById('scan-panel').style.display = 'flex';
+                    document.getElementById('scan-results').textContent = 'Move your device slowly around the room to scan';
+                } else {
+                    // On desktop, simulate a scan
+                    this.simulateRoomScan();
+                }
+            }
+            
+            scanRoom() {
+                this.isScanning = true;
+                document.getElementById('scan-button').textContent = 'Scanning...';
+                document.getElementById('scan-button').disabled = true;
+                
+                // In a real app, this would use device motion sensors and camera
+                // For demo purposes, we'll simulate a scan after 3 seconds
+                setTimeout(() => {
+                    this.finishRoomScan();
+                }, 3000);
+            }
+            
+            simulateRoomScan() {
+                // Simulate scanning a room with random furniture
+                const width = 10 + Math.random() * 8; // 10-18 ft
+                const depth = 8 + Math.random() * 6; // 8-14 ft
+                const height = 8 + Math.random() * 2; // 8-10 ft
+                
+                this.scannedDimensions = { width, depth, height };
+                this.createObstacles();
+                
+                // Update UI with scanned dimensions
+                document.getElementById('room-width').value = width.toFixed(1);
+                document.getElementById('room-depth').value = depth.toFixed(1);
+                document.getElementById('room-height').value = height.toFixed(1);
+                
+                // Update the room
+                this.roomWidth = width;
+                this.roomDepth = depth;
+                this.roomHeight = height;
+                this.createRoom();
+                
+                alert(`Room scanned successfully!\nWidth: ${width.toFixed(1)} ft\nDepth: ${depth.toFixed(1)} ft\nHeight: ${height.toFixed(1)} ft`);
+            }
+            
+            finishRoomScan() {
+                this.isScanning = false;
+                document.getElementById('scan-panel').style.display = 'none';
+                document.getElementById('scan-button').textContent = 'Start Scanning';
+                document.getElementById('scan-button').disabled = false;
+                
+                // Simulate getting dimensions from scan
+                this.simulateRoomScan();
+            }
+            
+            createObstacles() {
+                // Clear existing obstacles
+                this.obstacles.forEach(obj => this.scene.remove(obj));
+                this.obstacles = [];
+                
+                // Add some random furniture (for demo purposes)
+                const furnitureTypes = ['sofa', 'table', 'cabinet', 'bed', 'wardrobe'];
+                const colors = [0x8B4513, 0xA0522D, 0xCD853F, 0xD2B48C, 0xF5DEB3];
+                
+                for (let i = 0; i < 3; i++) {
+                    const type = furnitureTypes[Math.floor(Math.random() * furnitureTypes.length)];
+                    const width = 2 + Math.random() * 4;
+                    const depth = 1 + Math.random() * 3;
+                    const height = 1 + Math.random() * 2;
+                    const x = (Math.random() * this.roomWidth) - (this.roomWidth/2);
+                    const z = (Math.random() * this.roomDepth) - (this.roomDepth/2);
+                    const y = height/2;
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+                    
+                    const geometry = new THREE.BoxGeometry(width, height, depth);
+                    const material = new THREE.MeshBasicMaterial({ color });
+                    const furniture = new THREE.Mesh(geometry, material);
+                    furniture.position.set(x, y, z);
+                    
+                    this.scene.add(furniture);
+                    this.obstacles.push(furniture);
+                }
             }
             
             setTool(tool) {
@@ -549,6 +788,60 @@
                 }
             }
             
+            onTouchStart(e) {
+                if (this.currentMode !== '2d') return;
+                e.preventDefault();
+                
+                const touch = e.touches[0];
+                const mouse = new THREE.Vector2();
+                mouse.x = (touch.clientX / this.renderer.domElement.clientWidth) * 2 - 1;
+                mouse.y = -(touch.clientY / this.renderer.domElement.clientHeight) * 2 + 1;
+                
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, this.camera);
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const intersection = new THREE.Vector3();
+                raycaster.ray.intersectPlane(plane, intersection);
+                
+                this.startPoint = intersection;
+                this.isDrawing = true;
+                
+                switch(this.currentTool) {
+                    case 'wall':
+                        this.startWallDrawing(intersection);
+                        break;
+                    case 'door':
+                        this.addDoor(intersection);
+                        break;
+                    case 'window':
+                        this.addWindow(intersection);
+                        break;
+                }
+            }
+            
+            onTouchMove(e) {
+                if (!this.isDrawing || !this.startPoint || this.currentTool !== 'wall') return;
+                e.preventDefault();
+                
+                const touch = e.touches[0];
+                const mouse = new THREE.Vector2();
+                mouse.x = (touch.clientX / this.renderer.domElement.clientWidth) * 2 - 1;
+                mouse.y = -(touch.clientY / this.renderer.domElement.clientHeight) * 2 + 1;
+                
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, this.camera);
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const currentPoint = new THREE.Vector3();
+                raycaster.ray.intersectPlane(plane, currentPoint);
+                
+                this.updateTempWall(currentPoint);
+            }
+            
+            onTouchEnd() {
+                if (!this.isDrawing || !this.tempWall || this.currentTool !== 'wall') return;
+                this.finalizeWall();
+            }
+            
             startWallDrawing(startPoint) {
                 this.startPoint = startPoint;
                 this.isDrawing = true;
@@ -600,6 +893,10 @@
                 const currentPoint = new THREE.Vector3();
                 raycaster.ray.intersectPlane(plane, currentPoint);
                 
+                this.updateTempWall(currentPoint);
+            }
+            
+            updateTempWall(currentPoint) {
                 // Remove previous temp wall if exists
                 if (this.tempWall) {
                     this.scene.remove(this.tempWall);
@@ -631,284 +928,335 @@
             
             onMouseUp() {
                 if (!this.isDrawing || !this.tempWall || this.currentTool !== 'wall') return;
-                
-                // Convert the temporary wall to a permanent one
-                const wallMaterial = new THREE.MeshBasicMaterial({
-                    color: 0xcccccc
-                });
-                
-                this.tempWall.material = wallMaterial;
-                this.tempWall.material.needsUpdate = true;
-                
-                // Reset drawing state
-                this.isDrawing = false;
-                this.startPoint = null;
-                this.tempWall = null;
+                this.finalizeWall();
             }
-            
-            setMode(mode) {
-                this.currentMode = mode;
-                document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
-                document.querySelector(`.mode-btn[data-mode="${mode}"]`).classList.add('active');
-                
-                // Show/hide first-person UI
-                document.getElementById('first-person-ui').style.display = mode === 'fp' ? 'block' : 'none';
-                
-                if (mode === 'fp') {
-                    // Activate first-person controls
-                    this.controls.enabled = false;
-                    this.fpControls.lock();
-                    
-                    // Position camera at human height
-                    this.camera.position.set(0, 1.7, 5);
-                } else {
-                    // Deactivate first-person controls
-                    this.fpControls.unlock();
-                    this.controls.enabled = true;
-                    
-                    if (mode === '2d') {
-                        // Top-down view for 2D mode
-                        this.camera.position.set(0, 20, 0);
-                        this.camera.lookAt(0, 0, 0);
-                    } else {
-                        // Default 3D view
-                        this.camera.position.set(15, 15, 15);
-                    }
-                }
-            }
-            
-            createRoom() {
-                // Clear previous room if exists
-                if (this.room) {
-                    this.scene.remove(this.room);
-                    this.walls.forEach(wall => this.scene.remove(wall));
-                    this.walls = [];
-                }
-                
-                // Create room container
-                this.room = new THREE.Group();
-                
-                // Create floor with the selected material
-                this.createFloor();
-                
-                // Create walls
-                this.createWalls();
-                
-                // Add room to scene
-                this.scene.add(this.room);
-                
-                // Update stats
-                this.updateStats();
-            }
-            
-            createFloor() {
-                const floorGeometry = new THREE.PlaneGeometry(this.roomWidth, this.roomDepth);
-                floorGeometry.rotateX(-Math.PI / 2);
-                
-                // Get the texture URL for the selected material
-                const textureUrl = this.getTextureUrl(this.selectedMaterial);
-                
-                // Create material with loading handler
-                const floorMaterial = new THREE.MeshBasicMaterial({
-                    color: 0xdddddd // Default color
-                });
-                
-                // Load texture
-                new THREE.TextureLoader().load(
-                    textureUrl,
-                    (texture) => {
-                        texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        
-                        // Calculate repeat based on tile size (convert inches to feet)
-                        const tileWidthFt = this.tileWidth / 12;
-                        const tileHeightFt = this.tileHeight / 12;
-                        const repeatX = this.roomWidth / tileWidthFt;
-                        const repeatY = this.roomDepth / tileHeightFt;
-                        
-                        texture.repeat.set(repeatX, repeatY);
-                        
-                        // Update material with new texture
-                        floorMaterial.map = texture;
-                        floorMaterial.needsUpdate = true;
-                        
-                        // Create floor mesh
-                        this.floor = new THREE.Mesh(floorGeometry, floorMaterial);
-                        
-                        // Add to room if room exists
-                        if (this.room) {
-                            this.room.add(this.floor);
-                        }
-                        
-                        // Update tile count
-                        this.updateStats();
-                    },
-                    undefined,
-                    (error) => {
-                        console.error('Error loading texture:', error);
-                        // Fallback to a basic color if texture fails to load
-                        floorMaterial.color = new THREE.Color(0xdddddd);
-                        this.floor = new THREE.Mesh(floorGeometry, floorMaterial);
-                        if (this.room) {
-                            this.room.add(this.floor);
-                        }
-                    }
-                );
-            }
-            
-            createWalls() {
-                const wallThickness = 0.2;
-                
-                // Left wall
-                const wall1Geometry = new THREE.PlaneGeometry(this.roomDepth, this.roomHeight);
-                wall1Geometry.rotateY(Math.PI / 2);
-                
-                // Right wall
-                const wall2Geometry = new THREE.PlaneGeometry(this.roomDepth, this.roomHeight);
-                wall2Geometry.rotateY(-Math.PI / 2);
-                
-                // Back wall
-                const wall3Geometry = new THREE.PlaneGeometry(this.roomWidth, this.roomHeight);
-                
-                // Front wall (partial)
-                const wall4Geometry = new THREE.PlaneGeometry(this.roomWidth, this.roomHeight/2);
-                
-                // Create wall material
-                const wallMaterial = new THREE.MeshBasicMaterial({
-                    color: 0xeeeeee // Default color
-                });
-                
-                // Try to load wall texture (using first wall texture by default)
-                new THREE.TextureLoader().load(
-                    this.getTextureUrl('wall1'),
-                    (texture) => {
-                        texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        
-                        // Calculate repeat based on tile size (convert inches to feet)
-                        const tileWidthFt = this.tileWidth / 12;
-                        const tileHeightFt = this.tileHeight / 12;
-                        const repeatX = this.roomDepth / tileWidthFt;
-                        const repeatY = this.roomHeight / tileHeightFt;
-                        
-                        texture.repeat.set(repeatX, repeatY);
-                        wallMaterial.map = texture;
-                        wallMaterial.needsUpdate = true;
-                    },
-                    undefined,
-                    (error) => {
-                        console.error('Error loading wall texture:', error);
-                    }
-                );
-                
-                // Create wall meshes
-                const wall1 = new THREE.Mesh(wall1Geometry, wallMaterial.clone());
-                wall1.position.set(-this.roomWidth/2, this.roomHeight/2, 0);
-                this.walls.push(wall1);
-                
-                const wall2 = new THREE.Mesh(wall2Geometry, wallMaterial.clone());
-                wall2.position.set(this.roomWidth/2, this.roomHeight/2, 0);
-                this.walls.push(wall2);
-                
-                const wall3 = new THREE.Mesh(wall3Geometry, wallMaterial.clone());
-                wall3.position.set(0, this.roomHeight/2, -this.roomDepth/2);
-                this.walls.push(wall3);
-                
-                const wall4 = new THREE.Mesh(wall4Geometry, wallMaterial.clone());
-                wall4.position.set(0, this.roomHeight/4, this.roomDepth/2);
-                this.walls.push(wall4);
-                
-                // Add walls to room
-                this.walls.forEach(wall => this.room.add(wall));
-            }
-            
-            applySelectedMaterial() {
-                if (!this.floor) return;
-                
-                const textureUrl = this.getTextureUrl(this.selectedMaterial);
-                const floorMaterial = this.floor.material;
-                
-                new THREE.TextureLoader().load(
-                    textureUrl,
-                    (texture) => {
-                        texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        
-                        // Calculate repeat based on tile size (convert inches to feet)
-                        const tileWidthFt = this.tileWidth / 12;
-                        const tileHeightFt = this.tileHeight / 12;
-                        const repeatX = this.roomWidth / tileWidthFt;
-                        const repeatY = this.roomDepth / tileHeightFt;
-                        
-                        texture.repeat.set(repeatX, repeatY);
-                        floorMaterial.map = texture;
-                        floorMaterial.needsUpdate = true;
-                        
-                        // Update tile count
-                        this.updateStats();
-                    },
-                    undefined,
-                    (error) => {
-                        console.error('Error loading selected texture:', error);
-                        floorMaterial.color = new THREE.Color(0xdddddd);
-                        floorMaterial.needsUpdate = true;
-                    }
-                );
-            }
-            
-            getTextureUrl(textureId) {
-                // Map the texture IDs to your ImageKit URLs
-                const textures = {
-                    'floor1': 'https://ik.imagekit.io/pziy0u4kb/tile%201.jpg?updatedAt=1753787882692',
-                    'floor2': 'https://ik.imagekit.io/pziy0u4kb/tile%202.png?updatedAt=1753788299488',
-                    'floor3': 'https://ik.imagekit.io/pziy0u4kb/tile%203.webp?updatedAt=1753788450579',
-                    'wall1': 'https://ik.imagekit.io/pziy0u4kb/tile%204.webp?updatedAt=1754055287618',
-                    'wall2': 'https://ik.imagekit.io/pziy0u4kb/tile%205.jpg?updatedAt=1754055435637'
-                };
-                
-                return textures[textureId] || textures['floor1'];
-            }
-            
-            updateStats() {
-                const floorArea = this.roomWidth * this.roomDepth;
-                const wallArea = 2 * (this.roomWidth * this.roomHeight) + 2 * (this.roomDepth * this.roomHeight);
-                
-                // Calculate tile count based on tile size (convert inches to feet)
-                const tileWidthFt = this.tileWidth / 12;
-                const tileHeightFt = this.tileHeight / 12;
-                const floorTiles = Math.ceil(this.roomWidth / tileWidthFt) * Math.ceil(this.roomDepth / tileHeightFt);
-                const wallTiles = Math.ceil(2 * (this.roomWidth + this.roomDepth) / tileWidthFt) * Math.ceil(this.roomHeight / tileHeightFt);
-                const totalTiles = floorTiles + wallTiles;
-                
-                const totalCost = (floorArea + wallArea) * this.tilePrice;
-                
-                document.getElementById('stat-floor').textContent = `${floorArea.toFixed(1)} sq.ft`;
-                document.getElementById('stat-walls').textContent = `${wallArea.toFixed(1)} sq.ft`;
-                document.getElementById('stat-tile-count').textContent = totalTiles;
-                document.getElementById('stat-cost').textContent = `$${totalCost.toFixed(2)}`;
-            }
-            
-            onWindowResize() {
-                this.camera.aspect = (window.innerWidth - 360) / window.innerHeight;
-                this.camera.updateProjectionMatrix();
-                this.renderer.setSize(window.innerWidth - 360, window.innerHeight);
-            }
-            
-            animate() {
-                requestAnimationFrame(() => this.animate());
-                
-                if (this.controls.enabled) {
-                    this.controls.update();
-                }
-                
-                this.renderer.render(this.scene, this.camera);
-            }
-        }
-        
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', () => {
-            new TileVisualizer();
-        });
-    </script>
-</body>
+            finalizeWall() {
+// Convert the temporary wall to a permanent wall
+const wall = this.tempWall.clone();
+wall.material = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+this.scene.add(wall);
+this.walls.push(wall);
+
+// Remove the temporary wall
+this.scene.remove(this.tempWall);
+this.tempWall = null;
+
+// Reset drawing state
+this.isDrawing = false;
+this.startPoint = null;
+
+// Update statistics
+this.updateStats();
+}
+
+setMode(mode) {
+this.currentMode = mode;
+
+// Update UI
+document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+document.querySelector(`.mode-btn[data-mode="${mode}"]`).classList.add('active');
+
+// Switch between modes
+switch(mode) {
+case '2d':
+this.set2DMode();
+break;
+case '3d':
+this.set3DMode();
+break;
+case 'fp':
+this.setFirstPersonMode();
+break;
+}
+}
+
+set2DMode() {
+// Position camera for top-down view
+this.camera.position.set(0, 30, 0);
+this.camera.lookAt(0, 0, 0);
+
+// Enable orbit controls
+this.controls.enabled = true;
+
+// Disable first-person controls
+this.fpControls.unlock();
+this.scene.remove(this.fpControls.getObject());
+
+// Hide first-person UI
+document.getElementById('first-person-ui').style.display = 'none';
+
+// Show room from top
+this.controls.update();
+}
+
+set3DMode() {
+// Position camera for 3D view
+this.camera.position.set(15, 15, 15);
+this.camera.lookAt(0, 0, 0);
+
+// Enable orbit controls
+this.controls.enabled = true;
+
+// Disable first-person controls
+this.fpControls.unlock();
+this.scene.remove(this.fpControls.getObject());
+
+// Hide first-person UI
+document.getElementById('first-person-ui').style.display = 'none';
+
+// Update controls
+this.controls.update();
+}
+
+setFirstPersonMode() {
+// Position camera at human height
+this.camera.position.set(0, 5, 0);
+
+// Disable orbit controls
+this.controls.enabled = false;
+
+// Enable first-person controls
+this.scene.add(this.fpControls.getObject());
+this.fpControls.lock();
+
+// Show first-person UI
+document.getElementById('first-person-ui').style.display = 'block';
+}
+
+createRoom() {
+// Clear existing room
+if (this.room) {
+this.scene.remove(this.room);
+}
+
+// Create room group
+this.room = new THREE.Group();
+
+// Create floor
+const floorGeometry = new THREE.PlaneGeometry(this.roomWidth, this.roomDepth);
+const floorMaterial = new THREE.MeshStandardMaterial({
+color: 0xffffff,
+side: THREE.DoubleSide
+});
+this.floor = new THREE.Mesh(floorGeometry, floorMaterial);
+this.floor.rotation.x = Math.PI / 2; // Rotate to be horizontal
+this.floor.position.y = 0;
+this.room.add(this.floor);
+
+// Create walls
+this.createWalls();
+
+// Add room to scene
+this.scene.add(this.room);
+
+// Apply selected material
+this.applySelectedMaterial();
+
+// Update statistics
+this.updateStats();
+}
+
+createWalls() {
+// Clear existing walls
+this.walls.forEach(wall => this.scene.remove(wall));
+this.walls = [];
+
+const wallHeight = this.roomHeight;
+const wallThickness = 0.2;
+
+// Wall materials
+const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe0e0e0 });
+
+// Back wall
+const backWallGeometry = new THREE.BoxGeometry(this.roomWidth, wallHeight, wallThickness);
+const backWall = new THREE.Mesh(backWallGeometry, wallMaterial);
+backWall.position.set(0, wallHeight/2, -this.roomDepth/2);
+this.walls.push(backWall);
+this.room.add(backWall);
+
+// Front wall
+const frontWallGeometry = new THREE.BoxGeometry(this.roomWidth, wallHeight, wallThickness);
+const frontWall = new THREE.Mesh(frontWallGeometry, wallMaterial);
+frontWall.position.set(0, wallHeight/2, this.roomDepth/2);
+this.walls.push(frontWall);
+this.room.add(frontWall);
+
+// Left wall
+const leftWallGeometry = new THREE.BoxGeometry(wallThickness, wallHeight, this.roomDepth);
+const leftWall = new THREE.Mesh(leftWallGeometry, wallMaterial);
+leftWall.position.set(-this.roomWidth/2, wallHeight/2, 0);
+this.walls.push(leftWall);
+this.room.add(leftWall);
+
+// Right wall
+const rightWallGeometry = new THREE.BoxGeometry(wallThickness, wallHeight, this.roomDepth);
+const rightWall = new THREE.Mesh(rightWallGeometry, wallMaterial);
+rightWall.position.set(this.roomWidth/2, wallHeight/2, 0);
+this.walls.push(rightWall);
+this.room.add(rightWall);
+}
+
+applySelectedMaterial() {
+// Determine if this is a floor or wall material
+const isFloorMaterial = this.selectedMaterial.startsWith('floor');
+
+if (isFloorMaterial && this.floor) {
+// Apply texture to floor
+const textureLoader = new THREE.TextureLoader();
+
+// Calculate how many tiles we need
+const tileWidthFt = this.tileWidth / 12; // Convert inches to feet
+const tileHeightFt = this.tileHeight / 12; // Convert inches to feet
+
+// Load texture based on selection
+let textureUrl = '';
+switch(this.selectedMaterial) {
+case 'floor1':
+textureUrl = 'https://ik.imagekit.io/pziy0u4kb/tile%201.jpg?updatedAt=1753787882692';
+break;
+case 'floor2':
+textureUrl = 'https://ik.imagekit.io/pziy0u4kb/tile%202.png?updatedAt=1753788299488';
+break;
+case 'floor3':
+textureUrl = 'https://ik.imagekit.io/pziy0u4kb/tile%203.webp?updatedAt=1753788450579';
+break;
+}
+
+textureLoader.load(textureUrl, (texture) => {
+// Set texture wrapping and repeat
+texture.wrapS = THREE.RepeatWrapping;
+texture.wrapT = THREE.RepeatWrapping;
+texture.repeat.set(
+this.roomWidth / tileWidthFt,
+this.roomDepth / tileHeightFt
+);
+
+// Apply texture to floor
+this.floor.material.map = texture;
+this.floor.material.needsUpdate = true;
+});
+} else if (!isFloorMaterial) {
+// Apply texture to walls
+const textureLoader = new THREE.TextureLoader();
+
+// Calculate how many tiles we need
+const tileWidthFt = this.tileWidth / 12; // Convert inches to feet
+const tileHeightFt = this.tileHeight / 12; // Convert inches to feet
+
+// Load texture based on selection
+let textureUrl = '';
+switch(this.selectedMaterial) {
+case 'wall1':
+textureUrl = 'https://ik.imagekit.io/pziy0u4kb/tile%204.webp?updatedAt=1754055287618';
+break;
+case 'wall2':
+textureUrl = 'https://ik.imagekit.io/pziy0u4kb/tile%205.jpg?updatedAt=1754055435637';
+break;
+}
+
+textureLoader.load(textureUrl, (texture) => {
+// Set texture wrapping and repeat
+texture.wrapS = THREE.RepeatWrapping;
+texture.wrapT = THREE.RepeatWrapping;
+
+// Apply texture to each wall
+this.walls.forEach((wall, index) => {
+// Different walls have different dimensions
+let repeatX, repeatY;
+
+if (index < 2) { // Front and back walls
+repeatX = this.roomWidth / tileWidthFt;
+repeatY = this.roomHeight / tileHeightFt;
+} else { // Left and right walls
+repeatX = this.roomDepth / tileWidthFt;
+repeatY = this.roomHeight / tileHeightFt;
+}
+
+// Clone texture for each wall to have different repeat values
+const wallTexture = texture.clone();
+wallTexture.wrapS = THREE.RepeatWrapping;
+wallTexture.wrapT = THREE.RepeatWrapping;
+wallTexture.repeat.set(repeatX, repeatY);
+
+wall.material.map = wallTexture;
+wall.material.needsUpdate = true;
+});
+});
+}
+
+// Update statistics
+this.updateStats();
+}
+
+updateStats() {
+// Calculate floor area
+const floorArea = this.roomWidth * this.roomDepth;
+
+// Calculate wall area (minus doors and windows)
+let wallArea = 2 * (this.roomWidth + this.roomDepth) * this.roomHeight;
+
+// Subtract door areas
+this.doors.forEach(door => {
+const doorWidth = door.geometry.parameters.width;
+const doorHeight = door.geometry.parameters.height;
+wallArea -= doorWidth * doorHeight;
+});
+
+// Subtract window areas
+this.windows.forEach(window => {
+const windowWidth = window.geometry.parameters.width;
+const windowHeight = window.geometry.parameters.height;
+wallArea -= windowWidth * windowHeight;
+});
+
+// Calculate tile count
+const tileWidthFt = this.tileWidth / 12; // Convert inches to feet
+const tileHeightFt = this.tileHeight / 12; // Convert inches to feet
+const tileArea = tileWidthFt * tileHeightFt;
+
+// Determine if we're calculating for floor or walls
+const isFloorMaterial = this.selectedMaterial.startsWith('floor');
+const areaToCover = isFloorMaterial ? floorArea : wallArea;
+
+// Add 10% for waste
+const tileCount = Math.ceil(areaToCover / tileArea * 1.1);
+
+// Calculate costs
+const tileCost = tileCount * this.tilePrice;
+const installCost = areaToCover * this.installationRate;
+const totalCost = tileCost + installCost;
+
+// Update UI
+document.getElementById('stat-floor').textContent = `${floorArea.toFixed(1)} sq.ft`;
+document.getElementById('stat-walls').textContent = `${wallArea.toFixed(1)} sq.ft`;
+document.getElementById('stat-tile-count').textContent = tileCount.toString();
+document.getElementById('stat-cost').textContent = `$${tileCost.toFixed(2)}`;
+document.getElementById('stat-install-cost').textContent = `$${installCost.toFixed(2)}`;
+document.getElementById('stat-total-cost').textContent = `$${totalCost.toFixed(2)}`;
+}
+
+onWindowResize() {
+this.camera.aspect = window.innerWidth / window.innerHeight;
+this.camera.updateProjectionMatrix();
+this.renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+animate() {
+requestAnimationFrame(() => this.animate());
+
+if (this.controls && this.controls.enabled) {
+this.controls.update();
+}
+
+this.renderer.render(this.scene, this.camera);
+}
+}
+
+// Initialize the application when the page loads
+window.addEventListener('DOMContentLoaded', () => {
+const app = new TileVisualizer();
+});
+</script></body>
 </html>
+
+            
