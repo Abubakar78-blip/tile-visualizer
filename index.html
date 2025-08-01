@@ -202,6 +202,16 @@
         .cursor-crosshair {
             cursor: crosshair;
         }
+        #tile-size-panel {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            background: rgba(255,255,255,0.9);
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -212,6 +222,7 @@
             <button class="tool-btn" title="Door" id="btn-door">🚪</button>
             <button class="tool-btn" title="Window" id="btn-window">🪟</button>
             <div style="flex: 1;"></div>
+            <button class="tool-btn" title="Tile Size" id="btn-tile-size">📏</button>
             <button class="tool-btn" title="Settings" id="btn-settings">⚙️</button>
         </div>
         
@@ -271,6 +282,18 @@
                 <button id="btn-update-room" style="width: 100%; padding: 8px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer;">Update Room</button>
             </div>
             
+            <div id="tile-size-panel">
+                <div class="dimension-input">
+                    <label>Tile Width (inches)</label>
+                    <input type="number" id="tile-width" value="12" min="1" step="0.1">
+                </div>
+                <div class="dimension-input">
+                    <label>Tile Height (inches)</label>
+                    <input type="number" id="tile-height" value="12" min="1" step="0.1">
+                </div>
+                <button id="btn-update-tile-size" style="width: 100%; padding: 8px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer;">Update Tile Size</button>
+            </div>
+            
             <div id="viewer"></div>
             
             <div id="mode-switcher">
@@ -287,6 +310,10 @@
                 <div class="stat-item">
                     <div class="stat-label">Wall Area</div>
                     <div class="stat-value" id="stat-walls">352 sq.ft</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Tile Count</div>
+                    <div class="stat-value" id="stat-tile-count">0</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-label">Tile Cost</div>
@@ -319,9 +346,13 @@
                 this.roomDepth = 10;
                 this.roomHeight = 8;
                 this.tilePrice = 3.50;
+                this.tileWidth = 12; // inches
+                this.tileHeight = 12; // inches
                 this.isDrawing = false;
                 this.startPoint = null;
                 this.tempWall = null;
+                this.doors = [];
+                this.windows = [];
                 
                 this.init();
                 this.setupEventListeners();
@@ -340,7 +371,7 @@
                 // Renderer
                 this.renderer = new THREE.WebGLRenderer({ antialias: true });
                 this.renderer.setSize(window.innerWidth - 360, window.innerHeight);
-                this.renderer.shadowMap.enabled = true;
+                // Shadows removed as requested
                 document.getElementById('viewer').appendChild(this.renderer.domElement);
                 
                 // Controls
@@ -351,7 +382,7 @@
                 // First-person controls (initially inactive)
                 this.fpControls = new THREE.PointerLockControls(this.camera, document.body);
                 
-                // Lighting
+                // Lighting (simplified without shadows)
                 this.setupLighting();
                 
                 // Grid helper
@@ -370,9 +401,6 @@
                 // Directional light (sun)
                 const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
                 directionalLight.position.set(10, 20, 10);
-                directionalLight.castShadow = true;
-                directionalLight.shadow.mapSize.width = 2048;
-                directionalLight.shadow.mapSize.height = 2048;
                 this.scene.add(directionalLight);
                 
                 // Hemisphere light for natural illumination
@@ -390,6 +418,9 @@
                 document.getElementById('btn-wall').addEventListener('click', () => this.setTool('wall'));
                 document.getElementById('btn-door').addEventListener('click', () => this.setTool('door'));
                 document.getElementById('btn-window').addEventListener('click', () => this.setTool('window'));
+                document.getElementById('btn-tile-size').addEventListener('click', () => {
+                    document.getElementById('tile-size-panel').style.display = 'block';
+                });
                 document.getElementById('btn-settings').addEventListener('click', () => this.showSettings());
                 
                 // Mode switcher
@@ -421,6 +452,14 @@
                     document.getElementById('room-dimensions').style.display = 'none';
                 });
                 
+                // Tile size update
+                document.getElementById('btn-update-tile-size').addEventListener('click', () => {
+                    this.tileWidth = parseFloat(document.getElementById('tile-width').value);
+                    this.tileHeight = parseFloat(document.getElementById('tile-height').value);
+                    this.applySelectedMaterial();
+                    document.getElementById('tile-size-panel').style.display = 'none';
+                });
+                
                 // First-person controls
                 document.addEventListener('keydown', (e) => {
                     if (this.currentMode !== 'fp') return;
@@ -450,7 +489,7 @@
                     }
                 });
                 
-                // Mouse events for drawing walls
+                // Mouse events for drawing
                 this.renderer.domElement.addEventListener('mousedown', (e) => this.onMouseDown(e));
                 this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
                 this.renderer.domElement.addEventListener('mouseup', () => this.onMouseUp());
@@ -479,7 +518,7 @@
             }
             
             onMouseDown(e) {
-                if (this.currentTool !== 'wall' || this.currentMode !== '2d') return;
+                if (this.currentMode !== '2d') return;
                 
                 // Get mouse position in normalized device coordinates (-1 to +1)
                 const mouse = new THREE.Vector2();
@@ -495,6 +534,55 @@
                 
                 this.startPoint = intersection;
                 this.isDrawing = true;
+                
+                // Handle different tools
+                switch(this.currentTool) {
+                    case 'wall':
+                        this.startWallDrawing(intersection);
+                        break;
+                    case 'door':
+                        this.addDoor(intersection);
+                        break;
+                    case 'window':
+                        this.addWindow(intersection);
+                        break;
+                }
+            }
+            
+            startWallDrawing(startPoint) {
+                this.startPoint = startPoint;
+                this.isDrawing = true;
+            }
+            
+            addDoor(position) {
+                const doorWidth = 3; // feet
+                const doorHeight = 7; // feet
+                
+                const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, 0.2);
+                const doorMaterial = new THREE.MeshBasicMaterial({ color: 0x8B4513 }); // Brown color for door
+                
+                const door = new THREE.Mesh(doorGeometry, doorMaterial);
+                door.position.set(position.x, doorHeight/2, position.z);
+                this.scene.add(door);
+                this.doors.push(door);
+            }
+            
+            addWindow(position) {
+                const windowWidth = 4; // feet
+                const windowHeight = 4; // feet
+                const windowHeightFromFloor = 3; // feet
+                
+                const windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, 0.2);
+                const windowMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0x87CEEB,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                
+                const window = new THREE.Mesh(windowGeometry, windowMaterial);
+                window.position.set(position.x, windowHeightFromFloor + windowHeight/2, position.z);
+                this.scene.add(window);
+                this.windows.push(window);
             }
             
             onMouseMove(e) {
@@ -533,7 +621,7 @@
                 
                 this.tempWall = new THREE.Mesh(
                     wallGeometry,
-                    new THREE.MeshStandardMaterial({ color: 0x4a6fa5, transparent: true, opacity: 0.7 })
+                    new THREE.MeshBasicMaterial({ color: 0x4a6fa5, transparent: true, opacity: 0.7 })
                 );
                 this.tempWall.position.set(center.x, wallHeight/2, center.z);
                 this.tempWall.rotation.y = -angle + Math.PI/2;
@@ -545,16 +633,12 @@
                 if (!this.isDrawing || !this.tempWall || this.currentTool !== 'wall') return;
                 
                 // Convert the temporary wall to a permanent one
-                const wallMaterial = new THREE.MeshStandardMaterial({
-                    map: new THREE.TextureLoader().load(this.getTextureUrl('wall1')),
-                    roughness: 0.3,
-                    metalness: 0.05
+                const wallMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xcccccc
                 });
                 
                 this.tempWall.material = wallMaterial;
                 this.tempWall.material.needsUpdate = true;
-                this.tempWall.castShadow = true;
-                this.tempWall.receiveShadow = true;
                 
                 // Reset drawing state
                 this.isDrawing = false;
@@ -625,9 +709,8 @@
                 const textureUrl = this.getTextureUrl(this.selectedMaterial);
                 
                 // Create material with loading handler
-                const floorMaterial = new THREE.MeshStandardMaterial({
-                    roughness: 0.2,
-                    metalness: 0.1
+                const floorMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xdddddd // Default color
                 });
                 
                 // Load texture
@@ -636,8 +719,13 @@
                     (texture) => {
                         texture.wrapS = THREE.RepeatWrapping;
                         texture.wrapT = THREE.RepeatWrapping;
-                        const repeatX = this.roomWidth / 2;  // Adjust based on your desired tile size
-                        const repeatY = this.roomDepth / 2;
+                        
+                        // Calculate repeat based on tile size (convert inches to feet)
+                        const tileWidthFt = this.tileWidth / 12;
+                        const tileHeightFt = this.tileHeight / 12;
+                        const repeatX = this.roomWidth / tileWidthFt;
+                        const repeatY = this.roomDepth / tileHeightFt;
+                        
                         texture.repeat.set(repeatX, repeatY);
                         
                         // Update material with new texture
@@ -646,12 +734,14 @@
                         
                         // Create floor mesh
                         this.floor = new THREE.Mesh(floorGeometry, floorMaterial);
-                        this.floor.receiveShadow = true;
                         
                         // Add to room if room exists
                         if (this.room) {
                             this.room.add(this.floor);
                         }
+                        
+                        // Update tile count
+                        this.updateStats();
                     },
                     undefined,
                     (error) => {
@@ -659,7 +749,6 @@
                         // Fallback to a basic color if texture fails to load
                         floorMaterial.color = new THREE.Color(0xdddddd);
                         this.floor = new THREE.Mesh(floorGeometry, floorMaterial);
-                        this.floor.receiveShadow = true;
                         if (this.room) {
                             this.room.add(this.floor);
                         }
@@ -685,10 +774,8 @@
                 const wall4Geometry = new THREE.PlaneGeometry(this.roomWidth, this.roomHeight/2);
                 
                 // Create wall material
-                const wallMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xeeeeee, // Default color if texture fails
-                    roughness: 0.3,
-                    metalness: 0.05
+                const wallMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xeeeeee // Default color
                 });
                 
                 // Try to load wall texture (using first wall texture by default)
@@ -697,7 +784,14 @@
                     (texture) => {
                         texture.wrapS = THREE.RepeatWrapping;
                         texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(this.roomDepth / 2, this.roomHeight / 2);
+                        
+                        // Calculate repeat based on tile size (convert inches to feet)
+                        const tileWidthFt = this.tileWidth / 12;
+                        const tileHeightFt = this.tileHeight / 12;
+                        const repeatX = this.roomDepth / tileWidthFt;
+                        const repeatY = this.roomHeight / tileHeightFt;
+                        
+                        texture.repeat.set(repeatX, repeatY);
                         wallMaterial.map = texture;
                         wallMaterial.needsUpdate = true;
                     },
@@ -710,22 +804,18 @@
                 // Create wall meshes
                 const wall1 = new THREE.Mesh(wall1Geometry, wallMaterial.clone());
                 wall1.position.set(-this.roomWidth/2, this.roomHeight/2, 0);
-                wall1.receiveShadow = true;
                 this.walls.push(wall1);
                 
                 const wall2 = new THREE.Mesh(wall2Geometry, wallMaterial.clone());
                 wall2.position.set(this.roomWidth/2, this.roomHeight/2, 0);
-                wall2.receiveShadow = true;
                 this.walls.push(wall2);
                 
                 const wall3 = new THREE.Mesh(wall3Geometry, wallMaterial.clone());
                 wall3.position.set(0, this.roomHeight/2, -this.roomDepth/2);
-                wall3.receiveShadow = true;
                 this.walls.push(wall3);
                 
                 const wall4 = new THREE.Mesh(wall4Geometry, wallMaterial.clone());
                 wall4.position.set(0, this.roomHeight/4, this.roomDepth/2);
-                wall4.receiveShadow = true;
                 this.walls.push(wall4);
                 
                 // Add walls to room
@@ -743,9 +833,19 @@
                     (texture) => {
                         texture.wrapS = THREE.RepeatWrapping;
                         texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(this.roomWidth / 2, this.roomDepth / 2);
+                        
+                        // Calculate repeat based on tile size (convert inches to feet)
+                        const tileWidthFt = this.tileWidth / 12;
+                        const tileHeightFt = this.tileHeight / 12;
+                        const repeatX = this.roomWidth / tileWidthFt;
+                        const repeatY = this.roomDepth / tileHeightFt;
+                        
+                        texture.repeat.set(repeatX, repeatY);
                         floorMaterial.map = texture;
                         floorMaterial.needsUpdate = true;
+                        
+                        // Update tile count
+                        this.updateStats();
                     },
                     undefined,
                     (error) => {
@@ -772,10 +872,19 @@
             updateStats() {
                 const floorArea = this.roomWidth * this.roomDepth;
                 const wallArea = 2 * (this.roomWidth * this.roomHeight) + 2 * (this.roomDepth * this.roomHeight);
+                
+                // Calculate tile count based on tile size (convert inches to feet)
+                const tileWidthFt = this.tileWidth / 12;
+                const tileHeightFt = this.tileHeight / 12;
+                const floorTiles = Math.ceil(this.roomWidth / tileWidthFt) * Math.ceil(this.roomDepth / tileHeightFt);
+                const wallTiles = Math.ceil(2 * (this.roomWidth + this.roomDepth) / tileWidthFt) * Math.ceil(this.roomHeight / tileHeightFt);
+                const totalTiles = floorTiles + wallTiles;
+                
                 const totalCost = (floorArea + wallArea) * this.tilePrice;
                 
                 document.getElementById('stat-floor').textContent = `${floorArea.toFixed(1)} sq.ft`;
                 document.getElementById('stat-walls').textContent = `${wallArea.toFixed(1)} sq.ft`;
+                document.getElementById('stat-tile-count').textContent = totalTiles;
                 document.getElementById('stat-cost').textContent = `$${totalCost.toFixed(2)}`;
             }
             
