@@ -199,6 +199,9 @@
             width: 100%;
             padding: 5px;
         }
+        .cursor-crosshair {
+            cursor: crosshair;
+        }
     </style>
 </head>
 <body>
@@ -316,6 +319,9 @@
                 this.roomDepth = 10;
                 this.roomHeight = 8;
                 this.tilePrice = 3.50;
+                this.isDrawing = false;
+                this.startPoint = null;
+                this.tempWall = null;
                 
                 this.init();
                 this.setupEventListeners();
@@ -379,11 +385,12 @@
                 // Window resize
                 window.addEventListener('resize', () => this.onWindowResize());
                 
-                // Tool buttons
+                // Tool buttons - now fully functional
                 document.getElementById('btn-select').addEventListener('click', () => this.setTool('select'));
                 document.getElementById('btn-wall').addEventListener('click', () => this.setTool('wall'));
                 document.getElementById('btn-door').addEventListener('click', () => this.setTool('door'));
                 document.getElementById('btn-window').addEventListener('click', () => this.setTool('window'));
+                document.getElementById('btn-settings').addEventListener('click', () => this.showSettings());
                 
                 // Mode switcher
                 document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -437,8 +444,16 @@
                         case ' ':
                             this.camera.position.y += jumpSpeed;
                             break;
+                        case 'escape':
+                            this.setMode('3d');
+                            break;
                     }
                 });
+                
+                // Mouse events for drawing walls
+                this.renderer.domElement.addEventListener('mousedown', (e) => this.onMouseDown(e));
+                this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
+                this.renderer.domElement.addEventListener('mouseup', () => this.onMouseUp());
             }
             
             setTool(tool) {
@@ -446,7 +461,108 @@
                 document.querySelectorAll('#toolbar .tool-btn').forEach(btn => btn.classList.remove('active'));
                 document.getElementById(`btn-${tool}`).classList.add('active');
                 
-                // In a full implementation, we would change the cursor/behavior based on tool
+                // Change cursor based on tool
+                const viewer = document.getElementById('viewer');
+                viewer.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+                
+                // If switching from drawing tool, clean up any temp objects
+                if (this.tempWall) {
+                    this.scene.remove(this.tempWall);
+                    this.tempWall = null;
+                }
+                this.isDrawing = false;
+                this.startPoint = null;
+                
+                // Show tooltip
+                alert(`Selected tool: ${tool}`);
+            }
+            
+            showSettings() {
+                alert("Settings dialog would appear here.\nIn a full implementation, this would open a settings panel.");
+            }
+            
+            onMouseDown(e) {
+                if (this.currentTool !== 'wall' || this.currentMode !== '2d') return;
+                
+                // Get mouse position in normalized device coordinates (-1 to +1)
+                const mouse = new THREE.Vector2();
+                mouse.x = (e.clientX / this.renderer.domElement.clientWidth) * 2 - 1;
+                mouse.y = -(e.clientY / this.renderer.domElement.clientHeight) * 2 + 1;
+                
+                // Convert to world coordinates on the ground plane (y=0)
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, this.camera);
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const intersection = new THREE.Vector3();
+                raycaster.ray.intersectPlane(plane, intersection);
+                
+                this.startPoint = intersection;
+                this.isDrawing = true;
+            }
+            
+            onMouseMove(e) {
+                if (!this.isDrawing || !this.startPoint || this.currentTool !== 'wall') return;
+                
+                // Get current mouse position
+                const mouse = new THREE.Vector2();
+                mouse.x = (e.clientX / this.renderer.domElement.clientWidth) * 2 - 1;
+                mouse.y = -(e.clientY / this.renderer.domElement.clientHeight) * 2 + 1;
+                
+                // Convert to world coordinates
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, this.camera);
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const currentPoint = new THREE.Vector3();
+                raycaster.ray.intersectPlane(plane, currentPoint);
+                
+                // Remove previous temp wall if exists
+                if (this.tempWall) {
+                    this.scene.remove(this.tempWall);
+                }
+                
+                // Create a temporary wall visualization
+                const wallHeight = this.roomHeight;
+                const wallLength = this.startPoint.distanceTo(currentPoint);
+                const wallGeometry = new THREE.BoxGeometry(wallLength, wallHeight, 0.2);
+                
+                // Position the wall between start and current points
+                const center = new THREE.Vector3().addVectors(this.startPoint, currentPoint).multiplyScalar(0.5);
+                
+                // Calculate rotation to face the current point
+                const angle = Math.atan2(
+                    currentPoint.z - this.startPoint.z,
+                    currentPoint.x - this.startPoint.x
+                );
+                
+                this.tempWall = new THREE.Mesh(
+                    wallGeometry,
+                    new THREE.MeshStandardMaterial({ color: 0x4a6fa5, transparent: true, opacity: 0.7 })
+                );
+                this.tempWall.position.set(center.x, wallHeight/2, center.z);
+                this.tempWall.rotation.y = -angle + Math.PI/2;
+                
+                this.scene.add(this.tempWall);
+            }
+            
+            onMouseUp() {
+                if (!this.isDrawing || !this.tempWall || this.currentTool !== 'wall') return;
+                
+                // Convert the temporary wall to a permanent one
+                const wallMaterial = new THREE.MeshStandardMaterial({
+                    map: new THREE.TextureLoader().load(this.getTextureUrl('wall1')),
+                    roughness: 0.3,
+                    metalness: 0.05
+                });
+                
+                this.tempWall.material = wallMaterial;
+                this.tempWall.material.needsUpdate = true;
+                this.tempWall.castShadow = true;
+                this.tempWall.receiveShadow = true;
+                
+                // Reset drawing state
+                this.isDrawing = false;
+                this.startPoint = null;
+                this.tempWall = null;
             }
             
             setMode(mode) {
@@ -539,7 +655,7 @@
                 const wall4Geometry = new THREE.PlaneGeometry(this.roomWidth, this.roomHeight/2);
                 
                 // Load wall texture
-                const wallTexture = new THREE.TextureLoader().load('https://www.tileshop.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/s/u/subway-white-glazed-ceramic-wall-tile.jpg');
+                const wallTexture = new THREE.TextureLoader().load(this.getTextureUrl('wall1'));
                 wallTexture.wrapS = THREE.RepeatWrapping;
                 wallTexture.wrapT = THREE.RepeatWrapping;
                 wallTexture.repeat.set(this.roomDepth / 2, this.roomHeight / 2); // Adjust based on tile size
@@ -586,18 +702,16 @@
                 
                 this.floor.material.map = texture;
                 this.floor.material.needsUpdate = true;
-                
-                // In a full implementation, we would apply to selected surface (floor/wall)
             }
             
             getTextureUrl(textureId) {
-                // This would be expanded with all texture options
+                // Map the texture IDs to your ImageKit URLs
                 const textures = {
-                    'floor1': 'https://www.tileshop.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/c/r/crema-marfil-porcelain-floor-tile.jpg',
-                    'floor2': 'https://www.tileshop.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/s/c/screen_shot_2020-02-24_at_3.22.56_pm.png',
-                    'floor3': 'https://www.tileshop.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/2/4/24-polished-carrara-white-wall-floor-tile.jpg',
-                    'wall1': 'https://www.tileshop.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/s/u/subway-white-glazed-ceramic-wall-tile.jpg',
-                    'wall2': 'https://www.tileshop.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/m/e/mediterranean-blue-glazed-ceramic-wall-tile.jpg'
+                    'floor1': 'https://ik.imagekit.io/pziy0u4kb/tile%201.jpg?updatedAt=1753787882692',
+                    'floor2': 'https://ik.imagekit.io/pziy0u4kb/tile%202.png?updatedAt=1753788299488',
+                    'floor3': 'https://ik.imagekit.io/pziy0u4kb/tile%203.webp?updatedAt=1753788450579',
+                    'wall1': 'https://ik.imagekit.io/pziy0u4kb/tile%204.webp?updatedAt=1754055287618',
+                    'wall2': 'https://ik.imagekit.io/pziy0u4kb/tile%205.jpg?updatedAt=1754055435637'
                 };
                 
                 return textures[textureId] || textures['floor1'];
