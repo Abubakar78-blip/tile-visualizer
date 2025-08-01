@@ -403,7 +403,7 @@
                         document.querySelectorAll('.material-thumb').forEach(t => t.classList.remove('selected'));
                         e.target.classList.add('selected');
                         this.selectedMaterial = e.target.dataset.texture;
-                        this.applyMaterial();
+                        this.applySelectedMaterial();
                     });
                 });
                 
@@ -472,9 +472,6 @@
                 }
                 this.isDrawing = false;
                 this.startPoint = null;
-                
-                // Show tooltip
-                alert(`Selected tool: ${tool}`);
             }
             
             showSettings() {
@@ -607,25 +604,8 @@
                 // Create room container
                 this.room = new THREE.Group();
                 
-                // Create floor
-                const floorGeometry = new THREE.PlaneGeometry(this.roomWidth, this.roomDepth);
-                floorGeometry.rotateX(-Math.PI / 2);
-                
-                // Load floor texture
-                const floorTexture = new THREE.TextureLoader().load(this.getTextureUrl(this.selectedMaterial));
-                floorTexture.wrapS = THREE.RepeatWrapping;
-                floorTexture.wrapT = THREE.RepeatWrapping;
-                floorTexture.repeat.set(this.roomWidth / 2, this.roomDepth / 2); // Adjust based on tile size
-                
-                const floorMaterial = new THREE.MeshStandardMaterial({
-                    map: floorTexture,
-                    roughness: 0.2,
-                    metalness: 0.1
-                });
-                
-                this.floor = new THREE.Mesh(floorGeometry, floorMaterial);
-                this.floor.receiveShadow = true;
-                this.room.add(this.floor);
+                // Create floor with the selected material
+                this.createFloor();
                 
                 // Create walls
                 this.createWalls();
@@ -635,6 +615,56 @@
                 
                 // Update stats
                 this.updateStats();
+            }
+            
+            createFloor() {
+                const floorGeometry = new THREE.PlaneGeometry(this.roomWidth, this.roomDepth);
+                floorGeometry.rotateX(-Math.PI / 2);
+                
+                // Get the texture URL for the selected material
+                const textureUrl = this.getTextureUrl(this.selectedMaterial);
+                
+                // Create material with loading handler
+                const floorMaterial = new THREE.MeshStandardMaterial({
+                    roughness: 0.2,
+                    metalness: 0.1
+                });
+                
+                // Load texture
+                new THREE.TextureLoader().load(
+                    textureUrl,
+                    (texture) => {
+                        texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        const repeatX = this.roomWidth / 2;  // Adjust based on your desired tile size
+                        const repeatY = this.roomDepth / 2;
+                        texture.repeat.set(repeatX, repeatY);
+                        
+                        // Update material with new texture
+                        floorMaterial.map = texture;
+                        floorMaterial.needsUpdate = true;
+                        
+                        // Create floor mesh
+                        this.floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                        this.floor.receiveShadow = true;
+                        
+                        // Add to room if room exists
+                        if (this.room) {
+                            this.room.add(this.floor);
+                        }
+                    },
+                    undefined,
+                    (error) => {
+                        console.error('Error loading texture:', error);
+                        // Fallback to a basic color if texture fails to load
+                        floorMaterial.color = new THREE.Color(0xdddddd);
+                        this.floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                        this.floor.receiveShadow = true;
+                        if (this.room) {
+                            this.room.add(this.floor);
+                        }
+                    }
+                );
             }
             
             createWalls() {
@@ -654,17 +684,28 @@
                 // Front wall (partial)
                 const wall4Geometry = new THREE.PlaneGeometry(this.roomWidth, this.roomHeight/2);
                 
-                // Load wall texture
-                const wallTexture = new THREE.TextureLoader().load(this.getTextureUrl('wall1'));
-                wallTexture.wrapS = THREE.RepeatWrapping;
-                wallTexture.wrapT = THREE.RepeatWrapping;
-                wallTexture.repeat.set(this.roomDepth / 2, this.roomHeight / 2); // Adjust based on tile size
-                
+                // Create wall material
                 const wallMaterial = new THREE.MeshStandardMaterial({
-                    map: wallTexture,
+                    color: 0xeeeeee, // Default color if texture fails
                     roughness: 0.3,
                     metalness: 0.05
                 });
+                
+                // Try to load wall texture (using first wall texture by default)
+                new THREE.TextureLoader().load(
+                    this.getTextureUrl('wall1'),
+                    (texture) => {
+                        texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(this.roomDepth / 2, this.roomHeight / 2);
+                        wallMaterial.map = texture;
+                        wallMaterial.needsUpdate = true;
+                    },
+                    undefined,
+                    (error) => {
+                        console.error('Error loading wall texture:', error);
+                    }
+                );
                 
                 // Create wall meshes
                 const wall1 = new THREE.Mesh(wall1Geometry, wallMaterial.clone());
@@ -691,17 +732,28 @@
                 this.walls.forEach(wall => this.room.add(wall));
             }
             
-            applyMaterial() {
+            applySelectedMaterial() {
                 if (!this.floor) return;
                 
                 const textureUrl = this.getTextureUrl(this.selectedMaterial);
-                const texture = new THREE.TextureLoader().load(textureUrl);
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.repeat.set(this.roomWidth / 2, this.roomDepth / 2); // Adjust based on tile size
+                const floorMaterial = this.floor.material;
                 
-                this.floor.material.map = texture;
-                this.floor.material.needsUpdate = true;
+                new THREE.TextureLoader().load(
+                    textureUrl,
+                    (texture) => {
+                        texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(this.roomWidth / 2, this.roomDepth / 2);
+                        floorMaterial.map = texture;
+                        floorMaterial.needsUpdate = true;
+                    },
+                    undefined,
+                    (error) => {
+                        console.error('Error loading selected texture:', error);
+                        floorMaterial.color = new THREE.Color(0xdddddd);
+                        floorMaterial.needsUpdate = true;
+                    }
+                );
             }
             
             getTextureUrl(textureId) {
